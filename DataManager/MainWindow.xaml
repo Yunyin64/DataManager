@@ -1,0 +1,62 @@
+﻿<Window x:Class="DataManager.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:fileTree="clr-namespace:DataManager.Domain.FileTree"
+        xmlns:jsonEditor="clr-namespace:DataManager.Domain.JsonEditor"
+        mc:Ignorable="d"
+        Title="DataManager" Height="600" Width="1000"
+        WindowStartupLocation="CenterScreen">
+    <DockPanel>
+        <!-- 顶部工具栏 -->
+        <ToolBarTray DockPanel.Dock="Top">
+            <ToolBar Band="0" BandIndex="0">
+                <Button Command="{Binding OpenFolderCommand}" ToolTip="打开文件夹">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#128194;" Margin="0,0,4,0"/>
+                        <TextBlock Text="打开文件夹"/>
+                    </StackPanel>
+                </Button>
+                <Separator/>
+                <Button Command="{Binding SaveCommand}" ToolTip="保存">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#128190;" Margin="0,0,4,0"/>
+                        <TextBlock Text="保存"/>
+                    </StackPanel>
+                </Button>
+            </ToolBar>
+        </ToolBarTray>
+
+        <!-- 底部状态栏 -->
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem>
+                <TextBlock Text="{Binding StatusText}"/>
+            </StatusBarItem>
+        </StatusBar>
+
+        <!-- 中部左右分栏 -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" MinWidth="120"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 左侧文件导航 -->
+            <fileTree:FileTreeView Grid.Column="0"
+                                   DataContext="{Binding FileTreeVM}"/>
+
+            <!-- 分栏拖拽条 -->
+            <GridSplitter Grid.Column="1"
+                          Width="4"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch"
+                          Background="#E0E0E0"/>
+
+            <!-- 右侧 JSON 内容视图 -->
+            <jsonEditor:JsonEditorView Grid.Column="2"
+                                       DataContext="{Binding JsonEditorVM}"/>
+        </Grid>
+    </DockPanel>
+</Window>

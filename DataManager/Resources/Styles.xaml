@@ -1,0 +1,19 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- JSON 值类型颜色 -->
+    <Color x:Key="JsonStringColor">#D19A66</Color>
+    <Color x:Key="JsonNumberColor">#C678DD</Color>
+    <Color x:Key="JsonBoolTrueColor">#98C379</Color>
+    <Color x:Key="JsonBoolFalseColor">#E06C75</Color>
+    <Color x:Key="JsonNullColor">#5C6370</Color>
+    <Color x:Key="JsonComplexColor">#61AFEF</Color>
+
+    <SolidColorBrush x:Key="JsonStringBrush" Color="{StaticResource JsonStringColor}"/>
+    <SolidColorBrush x:Key="JsonNumberBrush" Color="{StaticResource JsonNumberColor}"/>
+    <SolidColorBrush x:Key="JsonBoolTrueBrush" Color="{StaticResource JsonBoolTrueColor}"/>
+    <SolidColorBrush x:Key="JsonBoolFalseBrush" Color="{StaticResource JsonBoolFalseColor}"/>
+    <SolidColorBrush x:Key="JsonNullBrush" Color="{StaticResource JsonNullColor}"/>
+    <SolidColorBrush x:Key="JsonComplexBrush" Color="{StaticResource JsonComplexColor}"/>
+
+</ResourceDictionary>

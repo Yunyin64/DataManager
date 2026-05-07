@@ -1,0 +1,8 @@
+{
+  "_comment": "把这个 fragment 合并到 <workDir>/.claude/settings.local.json。如果文件已存在，只追加 permissions.allow 列表里缺失的项即可。不要直接覆盖整个文件，否则会破坏用户的其他配置。",
+  "permissions": {
+    "allow": [
+      "Bash(*common-cli.exe *)"
+    ]
+  }
+}
