@@ -31,6 +31,17 @@ namespace DataManager.Domain.JsonEditor
         }
 
         /// <summary>
+        /// 更新指定列的值和类型，并触发属性变更通知。
+        /// 用于增量刷新场景（不重建行对象，仅更新数据）。
+        /// </summary>
+        public void UpdateValue(string columnName, object? value, JsonNodeType nodeType)
+        {
+            _values[columnName] = value;
+            _cellTypes[columnName] = nodeType;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(columnName));
+        }
+
+        /// <summary>
         /// 获取指定列的值。
         /// </summary>
         public object? GetValue(string columnName)

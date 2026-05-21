@@ -1,0 +1,223 @@
+---
+description: AI coding guidance and rules for this repository.
+alwaysApply: true
+---
+<rule>
+
+# DataManager Project Rules
+
+## 1. Project Overview
+
+- **Type**: WPF 桌面应用程序，.NET 8.0-windows，C#
+- **Architecture**: MVVM (CommunityToolkit.Mvvm) + 领域模块化
+- **Solution Structure**:
+  - `DataManager/` — WPF 主项目（核心业务）
+  - `common-cli/` — C++ 命令行工具（Named Pipe 通信桥）
+  - `integration/` — 集成参考文档和模板
+- **Key Dependencies**:
+  - `CommunityToolkit.Mvvm 8.*` — MVVM 基础设施（source generators）
+  - `Newtonsoft.Json 13.*` — JSON 解析与操作（JToken/JObject/JArray）
+  - `System.IO.Pipes.AccessControl 5.*` — Named Pipe 安全控制
+
+## 2. Naming Conventions
+
+| 元素 | 规则 | 示例 |
+|------|------|------|
+| 类 | PascalCase | `DataWorkspace`, `JsonEditorViewModel` |
+| 接口 | `I` + PascalCase | `IDataWorkspace`, `IJsonDataFile` |
+| 公有方法/属性 | PascalCase | `LoadFile()`, `RootPath` |
+| 私有字段 | `_camelCase` | `_workspace`, `_cliService` |
+| `[ObservableProperty]` 字段 | `_camelCase`（生成 PascalCase 属性） | `private string _statusText` → `StatusText` |
+| ViewModel 类 | `{Feature}ViewModel` | `MainViewModel`, `FileTreeViewModel` |
+| View 类 | `{Feature}View` | `FileTreeView`, `JsonEditorView` |
+| 枚举 | PascalCase，成员也是 PascalCase | `JsonNodeType.String` |
+| 命名空间 | `DataManager.{Layer}.{Feature}` | `DataManager.Domain.JsonEditor` |
+
+## 3. Project Structure
+
+```
+DataManager/
+├── Core/
+│   ├── Base/              # 基类（ViewModelBase）和接口（IDataWorkspace 等）
+│   │   └── Interface/
+│   ├── Services/          # 核心业务服务（JsonFileService 等）
+│   └── Utils/
+│       └── Converters/    # WPF IValueConverter 实现
+├── Data/                  # 数据模型实现（DataWorkspace, JsonDataFile）
+│   └── JsonNode/          # JSON 节点 ViewModel（JsonNodeVM, JsonNodeType）
+├── Domain/                # UI 功能模块（每个模块一个文件夹）
+│   ├── FileTree/          # 文件导航面板
+│   ├── JsonEditor/        # JSON 编辑器/表格视图
+│   └── Main/              # 主窗口协调
+├── Cli/                   # CLI 通信层
+└── Resources/             # XAML 样式资源
+```
+
+## 4. Core Patterns
+
+### 4.1 ViewModel 基类
+
+所有 ViewModel 继承 `ViewModelBase`（位于 `Core.Base.ViewModelBase`），后者继承 `ObservableObject`：
+
+```csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+
+namespace DataManager.Core.Base
+{
+    public class ViewModelBase : ObservableObject { }
+}
+```
+
+### 4.2 使用 Source Generators
+
+- 用 `[ObservableProperty]` 声明可观察属性（私有字段 `_camelCase`）
+- 用 `[RelayCommand]` 声明命令（私有方法名即命令名去 Command 后缀）
+- ViewModel 类必须标记为 `partial`
+
+```csharp
+public partial class MyViewModel : Core.Base.ViewModelBase
+{
+    [ObservableProperty]
+    private string _title = "";
+
+    [RelayCommand]
+    private void DoSomething() { /* ... */ }
+}
+```
+
+### 4.3 JSON 数据操作
+
+- **统一使用 `Newtonsoft.Json.Linq`**（JToken, JObject, JArray, JValue）作为 JSON 数据模型
+- **不使用 `System.Text.Json`** 作为数据模型（`System.Text.Json` 仅在 `CommonCliServer` 内部序列化响应时使用）
+- 通过 `JsonFileService` 读写文件，不直接使用 `File.ReadAllText` + `JToken.Parse`
+- JSONPath 查询使用 `JToken.SelectTokens(path)` / `JToken.SelectToken(path)`
+
+### 4.4 线程安全
+
+- CLI handler 中所有对 DataWorkspace 的读写必须通过 `Dispatcher.Invoke` 切到 UI 线程
+- UI 线程操作通过 `_dispatcher.Invoke(Func<T>)` 包装
+- 文件注册表操作使用 `FileStream.Lock()` 做独占锁
+
+### 4.5 错误处理
+
+- 在数据层/服务层抛出带中文消息的标准异常：`InvalidOperationException`, `ArgumentException`, `FileNotFoundException`
+- CLI 层在最外层统一 `catch (Exception ex)` 并返回 `CliResponse.Fail(ex.Message)`
+- 不使用自定义异常类（除非功能确实需要）
+
+### 4.6 IDisposable 模式
+
+- 管理非托管资源（Named Pipe、文件流）的类实现 `IDisposable`
+- 使用 `_disposed` 字段防重入
+- 在 `App.OnExit` 中确保所有服务正确 Dispose
+
+## 5. Domain Module Scaffolding
+
+新增 UI 功能模块时，按以下模板创建：
+
+```
+Domain/{Feature}/
+├── {Feature}View.xaml          # UserControl XAML
+├── {Feature}View.xaml.cs       # Code-behind（仅 InitializeComponent）
+└── {Feature}ViewModel.cs       # 继承 ViewModelBase 的 partial 类
+```
+
+**View code-behind 模板**:
+
+```csharp
+using System.Windows.Controls;
+
+namespace DataManager.Domain.{Feature}
+{
+    /// <summary>
+    /// {Feature}面板。
+    /// </summary>
+    public partial class {Feature}View : UserControl
+    {
+        public {Feature}View()
+        {
+            InitializeComponent();
+        }
+    }
+}
+```
+
+**ViewModel 模板**:
+
+```csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+
+namespace DataManager.Domain.{Feature}
+{
+    /// <summary>
+    /// {Feature} ViewModel。{功能描述}。
+    /// </summary>
+    public partial class {Feature}ViewModel : Core.Base.ViewModelBase
+    {
+        // [ObservableProperty] 字段
+        // [RelayCommand] 方法
+    }
+}
+```
+
+## 6. CLI Handler Pattern
+
+新增 CLI 命令时遵循以下模式：
+
+```csharp
+private CliResponse Handle{CommandName}(CliParseResult parsed)
+{
+    // 1. 验证参数
+    if (parsed.Args.Count == 0)
+        return CliResponse.Fail("usage: {command} <args>");
+
+    // 2. 在 UI 线程执行
+    return InvokeOnUI(() =>
+    {
+        var ws = GetWorkspaceOrThrow();
+        // 3. 业务逻辑
+        // 4. 返回结果
+        return CliResponse.Success(result);
+    });
+}
+```
+
+命令路由在 `HandleCommand` 的 switch 表达式中注册。
+
+## 7. Language and Comments
+
+- **所有注释使用中文**（XML `<summary>` 和行内注释）
+- **错误消息使用中文**（面向用户的异常消息）
+- **UI 文本使用中文**
+- **CLI 响应消息使用英文**（面向 AI Agent 消费）
+- 接口成员使用 `/// <inheritdoc/>` 省略重复文档
+
+## 8. Key APIs Quick Reference
+
+| 类 | 方法 | 说明 |
+|----|------|------|
+| `JsonFileService` | `ReadJson(filePath)` → `JToken` | 读取并解析 JSON 文件 |
+| `JsonFileService` | `WriteJson(filePath, JToken)` | 序列化并写入 JSON |
+| `JsonFileService` | `ScanJsonFiles(dir, recursive)` → `IReadOnlyList<string>` | 扫描 .json 文件路径 |
+| `IDataWorkspace` | `Load()` / `Save()` / `GetFile(fileName)` | 工作区操作 |
+| `IJsonDataFile` | `Load()` / `Save()` / `Query(jsonPath)` / `Modify(jsonPath, value)` | 文件操作 |
+| `CliResponse` | `Success(output)` / `Fail(error, code)` | CLI 响应构造 |
+| `CliArgParser` | `Parse(args, aliases, valueOptions)` → `CliParseResult` | 参数解析 |
+| `ViewModelBase` | 继承自 `ObservableObject` | ViewModel 基类 |
+
+## 9. XAML Conventions
+
+- UserControl 使用命名空间别名引用：`xmlns:feature="clr-namespace:DataManager.Domain.{Feature}"`
+- 颜色资源定义在 `Resources/Styles.xaml`，使用 `StaticResource` 引用
+- DataGrid 默认 `IsReadOnly="True"` + `AutoGenerateColumns="False"`
+- 使用 DataTrigger 控制 Visibility（而非 BooleanToVisibilityConverter）
+- View 的 DataContext 由父级通过 Binding 赋值，不在 View 内部自己 new ViewModel
+
+## 10. Constraints
+
+- **Nullable 已启用**: 所有引用类型需正确标注 `?` 可空性
+- **ImplicitUsings 已启用**: 不需要显式 `using System;` 等基础命名空间
+- **不引入新的 NuGet 包**: 除非功能确实需要且经确认
+- **JSON 序列化一致性**: 写入文件时使用 `Formatting.Indented`，CLI 响应使用 `Formatting.None`
+- **工作区模型**: 一个文件夹 = 一个工作区，所有 .json 文件递归扫描加载
+
+</rule>

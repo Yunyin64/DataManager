@@ -5,9 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:fileTree="clr-namespace:DataManager.Domain.FileTree"
         xmlns:jsonEditor="clr-namespace:DataManager.Domain.JsonEditor"
+        xmlns:luaViewer="clr-namespace:DataManager.Domain.LuaViewer"
         mc:Ignorable="d"
         Title="DataManager" Height="600" Width="1000"
         WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </Window.Resources>
     <DockPanel>
         <!-- 顶部工具栏 -->
         <ToolBarTray DockPanel.Dock="Top">
@@ -41,6 +45,8 @@
                 <ColumnDefinition Width="200" MinWidth="120"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="350" MinWidth="200"/>
             </Grid.ColumnDefinitions>
 
             <!-- 左侧文件导航 -->
@@ -57,6 +63,19 @@
             <!-- 右侧 JSON 内容视图 -->
             <jsonEditor:JsonEditorView Grid.Column="2"
                                        DataContext="{Binding JsonEditorVM}"/>
+
+            <!-- Lua 面板分隔条（仅面板可见时显示） -->
+            <GridSplitter Grid.Column="3"
+                          Width="4"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch"
+                          Background="#E0E0E0"
+                          Visibility="{Binding LuaViewerVM.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+            <!-- Lua 查阅/编辑面板 -->
+            <luaViewer:LuaViewerView Grid.Column="4"
+                                     DataContext="{Binding LuaViewerVM}"
+                                     Visibility="{Binding LuaViewerVM.IsVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
         </Grid>
     </DockPanel>
 </Window>

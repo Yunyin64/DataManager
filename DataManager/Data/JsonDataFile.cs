@@ -30,7 +30,7 @@ namespace DataManager.Data
         public JToken? RootToken { get; private set; }
 
         /// <inheritdoc/>
-        public bool IsDirty { get; private set; }
+        public bool IsDirty { get; internal set; }
 
         /// <inheritdoc/>
         public void Load()

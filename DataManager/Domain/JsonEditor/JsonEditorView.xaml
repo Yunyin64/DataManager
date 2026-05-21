@@ -6,15 +6,44 @@
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="600">
     <Grid Background="White">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 工具栏区域 -->
+        <Border Grid.Row="0" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0,0,0,1" Padding="6,4">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Visible"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasData}" Value="False">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <StackPanel Orientation="Horizontal">
+                <Button Content="📋 复制简洁信息"
+                        Command="{Binding CopySimpleSummaryCommand}"
+                        Padding="8,3"
+                        FontSize="12"
+                        Cursor="Hand"
+                        ToolTip="将当前表格数据以 Tab 分隔格式复制到剪贴板"/>
+            </StackPanel>
+        </Border>
+
         <!-- DataGrid 表格区域（有数据时显示） -->
         <DataGrid x:Name="DataGridView"
+                  Grid.Row="1"
                   ItemsSource="{Binding Rows}"
                   AutoGenerateColumns="False"
-                  IsReadOnly="True"
+                  IsReadOnly="False"
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
                   CanUserReorderColumns="False"
-                  HeadersVisibility="Column"
+                  CanUserSortColumns="False"
+                  HeadersVisibility="All"
                   GridLinesVisibility="All"
                   HorizontalGridLinesBrush="#E8E8E8"
                   VerticalGridLinesBrush="#E8E8E8"
@@ -22,7 +51,10 @@
                   RowHeaderWidth="50"
                   SelectionUnit="Cell"
                   BorderThickness="0"
-                  FontSize="13">
+                  FontSize="13"
+                  LoadingRow="DataGridView_LoadingRow"
+                  BeginningEdit="DataGridView_BeginningEdit"
+                  CellEditEnding="DataGridView_CellEditEnding">
             <DataGrid.Style>
                 <Style TargetType="DataGrid">
                     <Setter Property="Visibility" Value="Visible"/>
@@ -45,7 +77,8 @@
         </DataGrid>
 
         <!-- 不支持结构时的提示文本 -->
-        <TextBlock Text="{Binding UnsupportedMessage}"
+        <TextBlock Grid.Row="1"
+                   Text="{Binding UnsupportedMessage}"
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
                    Foreground="#999"
