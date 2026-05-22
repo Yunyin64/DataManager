@@ -65,6 +65,14 @@
                     </Style.Triggers>
                 </Style>
             </DataGrid.Style>
+            <DataGrid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="功能 1" IsEnabled="False"/>
+                    <MenuItem Header="功能 2" IsEnabled="False"/>
+                    <MenuItem Header="功能 3" IsEnabled="False"/>
+                    <MenuItem Header="功能 4" IsEnabled="False"/>
+                </ContextMenu>
+            </DataGrid.ContextMenu>
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="DataGridColumnHeader">
                     <Setter Property="Background" Value="#F0F0F0"/>

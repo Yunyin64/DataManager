@@ -7,7 +7,7 @@
         xmlns:jsonEditor="clr-namespace:DataManager.Domain.JsonEditor"
         xmlns:luaViewer="clr-namespace:DataManager.Domain.LuaViewer"
         mc:Ignorable="d"
-        Title="DataManager" Height="600" Width="1000"
+        Title="DataManager" Height="800" Width="1050"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
@@ -46,7 +46,7 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="350" MinWidth="200"/>
+                <ColumnDefinition x:Name="LuaPanelColumn" Width="0" MinWidth="0"/>
             </Grid.ColumnDefinitions>
 
             <!-- 左侧文件导航 -->
@@ -60,9 +60,54 @@
                           VerticalAlignment="Stretch"
                           Background="#E0E0E0"/>
 
-            <!-- 右侧 JSON 内容视图 -->
-            <jsonEditor:JsonEditorView Grid.Column="2"
-                                       DataContext="{Binding JsonEditorVM}"/>
+            <!-- 中间列：JSON 编辑器 + 底部需求输入框 -->
+            <DockPanel Grid.Column="2">
+                <!-- 底部需求输入栏 -->
+                <Border DockPanel.Dock="Bottom"
+                        BorderBrush="#E0E0E0"
+                        BorderThickness="0,1,0,0"
+                        Padding="8,6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding RequestInput, UpdateSourceTrigger=PropertyChanged}"
+                                 VerticalContentAlignment="Center"
+                                 Padding="6,4"
+                                 FontSize="13">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Style.Resources>
+                                        <VisualBrush x:Key="PlaceholderBrush" AlignmentX="Left" AlignmentY="Center" Stretch="None">
+                                            <VisualBrush.Visual>
+                                                <TextBlock Text="输入需求..." Foreground="#999" FontSize="13" Margin="8,0,0,0"/>
+                                            </VisualBrush.Visual>
+                                        </VisualBrush>
+                                    </Style.Resources>
+                                    <Style.Triggers>
+                                        <Trigger Property="Text" Value="">
+                                            <Setter Property="Background" Value="{StaticResource PlaceholderBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="Text" Value="{x:Null}">
+                                            <Setter Property="Background" Value="{StaticResource PlaceholderBrush}"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <Button Grid.Column="1"
+                                Content="提交"
+                                Command="{Binding SubmitRequestCommand}"
+                                Padding="12,4"
+                                Margin="6,0,0,0"/>
+                    </Grid>
+                </Border>
+
+                <!-- JSON 内容视图 -->
+                <jsonEditor:JsonEditorView DataContext="{Binding JsonEditorVM}"/>
+            </DockPanel>
 
             <!-- Lua 面板分隔条（仅面板可见时显示） -->
             <GridSplitter Grid.Column="3"

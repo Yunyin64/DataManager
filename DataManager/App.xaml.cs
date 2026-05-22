@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using DataManager.Cli;
+using DataManager.Core.Utils;
 using DataManager.Domain.Main;
 
 namespace DataManager
@@ -15,6 +16,9 @@ namespace DataManager
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // 确保 common-cli.exe 所在目录在用户 PATH 中
+            PathRegistrar.EnsureCliInPath();
 
             // 创建 CLI 服务（使用当前 Dispatcher 确保 UI 线程安全）
             _cliService = new CliService(Dispatcher);

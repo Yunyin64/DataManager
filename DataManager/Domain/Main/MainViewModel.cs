@@ -64,6 +64,24 @@ namespace DataManager.Domain.Main
         [ObservableProperty]
         private string _statusText = "就绪";
 
+        /// <summary>需求输入框文本</summary>
+        [ObservableProperty]
+        private string _requestInput = "";
+
+        /// <summary>
+        /// 提交需求命令。
+        /// </summary>
+        [RelayCommand]
+        private void SubmitRequest()
+        {
+            // TODO: 对接需求处理逻辑
+            if (string.IsNullOrWhiteSpace(RequestInput))
+                return;
+
+            StatusText = $"已提交需求：{RequestInput}";
+            RequestInput = "";
+        }
+
         /// <summary>工作区变更事件（供 App 层监听，驱动 CliService 更新）</summary>
         public event Action<string?>? WorkspaceChanged;
 

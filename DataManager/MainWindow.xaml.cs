@@ -45,12 +45,16 @@ namespace DataManager
 
             if (_viewModel.LuaViewerVM.IsVisible)
             {
-                // 面板显示 → 窗口变宽
+                // 面板显示 → 列恢复宽度，窗口变宽
+                LuaPanelColumn.MinWidth = 300;
+                LuaPanelColumn.Width = new GridLength(500);
                 Width += LuaPanelWidth;
             }
             else
             {
-                // 面板隐藏 → 窗口缩回
+                // 面板隐藏 → 列宽度归零，窗口缩回
+                LuaPanelColumn.MinWidth = 0;
+                LuaPanelColumn.Width = new GridLength(0);
                 Width -= LuaPanelWidth;
             }
         }

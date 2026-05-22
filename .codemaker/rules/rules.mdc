@@ -17,6 +17,7 @@ alwaysApply: true
 - **Key Dependencies**:
   - `CommunityToolkit.Mvvm 8.*` — MVVM 基础设施（source generators）
   - `Newtonsoft.Json 13.*` — JSON 解析与操作（JToken/JObject/JArray）
+  - `AvalonEdit 6.*` — 代码编辑器控件（用于 Lua 面板等）
   - `System.IO.Pipes.AccessControl 5.*` — Named Pipe 安全控制
 
 ## 2. Naming Conventions
@@ -24,14 +25,15 @@ alwaysApply: true
 | 元素 | 规则 | 示例 |
 |------|------|------|
 | 类 | PascalCase | `DataWorkspace`, `JsonEditorViewModel` |
-| 接口 | `I` + PascalCase | `IDataWorkspace`, `IJsonDataFile` |
+| 接口 | `I` + PascalCase | `IDataWorkspace`, `IJsonDataFile`, `ICliCommand` |
 | 公有方法/属性 | PascalCase | `LoadFile()`, `RootPath` |
 | 私有字段 | `_camelCase` | `_workspace`, `_cliService` |
 | `[ObservableProperty]` 字段 | `_camelCase`（生成 PascalCase 属性） | `private string _statusText` → `StatusText` |
 | ViewModel 类 | `{Feature}ViewModel` | `MainViewModel`, `FileTreeViewModel` |
 | View 类 | `{Feature}View` | `FileTreeView`, `JsonEditorView` |
-| 枚举 | PascalCase，成员也是 PascalCase | `JsonNodeType.String` |
+| 枚举 | PascalCase，成员也是 PascalCase | `JsonNodeType.String`, `SortDirection.Ascending` |
 | 命名空间 | `DataManager.{Layer}.{Feature}` | `DataManager.Domain.JsonEditor` |
+| CLI 命令类 | `{Action}Command` | `AddCommand`, `BatchUpdateCommand` |
 
 ## 3. Project Structure
 
@@ -42,14 +44,17 @@ DataManager/
 │   │   └── Interface/
 │   ├── Services/          # 核心业务服务（JsonFileService 等）
 │   └── Utils/
-│       └── Converters/    # WPF IValueConverter 实现
+│       ├── Converters/    # WPF IValueConverter 实现
+│       └── Extensions/    # 扩展方法
 ├── Data/                  # 数据模型实现（DataWorkspace, JsonDataFile）
 │   └── JsonNode/          # JSON 节点 ViewModel（JsonNodeVM, JsonNodeType）
 ├── Domain/                # UI 功能模块（每个模块一个文件夹）
 │   ├── FileTree/          # 文件导航面板
 │   ├── JsonEditor/        # JSON 编辑器/表格视图
+│   ├── LuaViewer/         # Lua 查阅/编辑面板
 │   └── Main/              # 主窗口协调
 ├── Cli/                   # CLI 通信层
+│   └── Commands/          # CLI 命令实现（每个命令一个文件）
 └── Resources/             # XAML 样式资源
 ```
 
@@ -95,8 +100,9 @@ public partial class MyViewModel : Core.Base.ViewModelBase
 ### 4.4 线程安全
 
 - CLI handler 中所有对 DataWorkspace 的读写必须通过 `Dispatcher.Invoke` 切到 UI 线程
-- UI 线程操作通过 `_dispatcher.Invoke(Func<T>)` 包装
+- UI 线程操作通过 `_dispatcher.Invoke(Func<T>)` 包装（`CliCommandBase.InvokeOnUI`）
 - 文件注册表操作使用 `FileStream.Lock()` 做独占锁
+- 自动重载使用 `DispatcherTimer`（1 秒间隔），编辑时跳过重载
 
 ### 4.5 错误处理
 
@@ -117,7 +123,7 @@ public partial class MyViewModel : Core.Base.ViewModelBase
 ```
 Domain/{Feature}/
 ├── {Feature}View.xaml          # UserControl XAML
-├── {Feature}View.xaml.cs       # Code-behind（仅 InitializeComponent）
+├── {Feature}View.xaml.cs       # Code-behind（仅 InitializeComponent + 必要事件转发）
 └── {Feature}ViewModel.cs       # 继承 ViewModelBase 的 partial 类
 ```
 
@@ -159,29 +165,75 @@ namespace DataManager.Domain.{Feature}
 }
 ```
 
-## 6. CLI Handler Pattern
+## 6. CLI Command Pattern
 
-新增 CLI 命令时遵循以下模式：
+CLI 命令使用 `ICliCommand` 接口 + `CliCommandBase` 抽象基类。每个命令一个独立文件，放在 `Cli/Commands/` 目录。
+
+### 6.1 命令接口
 
 ```csharp
-private CliResponse Handle{CommandName}(CliParseResult parsed)
+public interface ICliCommand
 {
-    // 1. 验证参数
-    if (parsed.Args.Count == 0)
-        return CliResponse.Fail("usage: {command} <args>");
-
-    // 2. 在 UI 线程执行
-    return InvokeOnUI(() =>
-    {
-        var ws = GetWorkspaceOrThrow();
-        // 3. 业务逻辑
-        // 4. 返回结果
-        return CliResponse.Success(result);
-    });
+    string Name { get; }
+    CliResponse Execute(CliParseResult parsed);
 }
 ```
 
-命令路由在 `HandleCommand` 的 switch 表达式中注册。
+### 6.2 命令基类
+
+`CliCommandBase` 封装了：
+- `InvokeOnUI(Func<CliResponse>)` — UI 线程调度
+- `GetWorkspaceOrThrow()` — 获取当前工作区（未加载则抛异常）
+- `FindFile(DataWorkspace, string)` — 按文件名查找（支持带/不带 .json 后缀）
+
+### 6.3 新增命令模板
+
+```csharp
+using System;
+using System.Windows.Threading;
+using DataManager.Data;
+
+namespace DataManager.Cli.Commands
+{
+    /// <summary>
+    /// {commandName} 命令。{功能描述}。
+    /// </summary>
+    public class {Name}Command : CliCommandBase
+    {
+        public {Name}Command(
+            Dispatcher dispatcher,
+            Func<DataWorkspace?> workspaceAccessor,
+            Action? onDataModified = null)
+            : base(dispatcher, workspaceAccessor, onDataModified)
+        {
+        }
+
+        public override string Name => "{commandName}";
+
+        public override CliResponse Execute(CliParseResult parsed)
+        {
+            // 1. 验证参数
+            if (parsed.Args.Count == 0)
+                return CliResponse.Fail("usage: {commandName} <args>");
+
+            // 2. 在 UI 线程执行
+            return InvokeOnUI(() =>
+            {
+                var ws = GetWorkspaceOrThrow();
+                // 3. 业务逻辑
+                // 4. 通知修改（如果改了数据）
+                _onDataModified?.Invoke();
+                // 5. 返回结果
+                return CliResponse.Success("done");
+            });
+        }
+    }
+}
+```
+
+### 6.4 命令注册
+
+在 `CliService.RegisterCommands()` 的 `commandList` 数组中添加新命令实例。
 
 ## 7. Language and Comments
 
@@ -200,8 +252,15 @@ private CliResponse Handle{CommandName}(CliParseResult parsed)
 | `JsonFileService` | `ScanJsonFiles(dir, recursive)` → `IReadOnlyList<string>` | 扫描 .json 文件路径 |
 | `IDataWorkspace` | `Load()` / `Save()` / `GetFile(fileName)` | 工作区操作 |
 | `IJsonDataFile` | `Load()` / `Save()` / `Query(jsonPath)` / `Modify(jsonPath, value)` | 文件操作 |
+| `IJsonDataFile` | `IsDirty` / `RootToken` / `FilePath` / `FileName` | 文件状态属性 |
+| `ICliCommand` | `Name` / `Execute(CliParseResult)` | CLI 命令契约 |
+| `CliCommandBase` | `InvokeOnUI(Func<CliResponse>)` | UI 线程调度 |
+| `CliCommandBase` | `GetWorkspaceOrThrow()` → `DataWorkspace` | 获取工作区 |
+| `CliCommandBase` | `FindFile(DataWorkspace, string)` → `IJsonDataFile?` | 按名查找文件 |
 | `CliResponse` | `Success(output)` / `Fail(error, code)` | CLI 响应构造 |
 | `CliArgParser` | `Parse(args, aliases, valueOptions)` → `CliParseResult` | 参数解析 |
+| `CliParseResult` | `Command` / `Options` / `Flags` / `Args` | 解析结果属性 |
+| `CliParseResult` | `HasFlag(name)` / `GetOption(name)` / `GetIntOption(name)` | 便捷访问 |
 | `ViewModelBase` | 继承自 `ObservableObject` | ViewModel 基类 |
 
 ## 9. XAML Conventions
@@ -209,8 +268,9 @@ private CliResponse Handle{CommandName}(CliParseResult parsed)
 - UserControl 使用命名空间别名引用：`xmlns:feature="clr-namespace:DataManager.Domain.{Feature}"`
 - 颜色资源定义在 `Resources/Styles.xaml`，使用 `StaticResource` 引用
 - DataGrid 默认 `IsReadOnly="True"` + `AutoGenerateColumns="False"`
-- 使用 DataTrigger 控制 Visibility（而非 BooleanToVisibilityConverter）
+- Visibility 控制优先使用 DataTrigger；简单布尔绑定场景可使用 `BooleanToVisibilityConverter`
 - View 的 DataContext 由父级通过 Binding 赋值，不在 View 内部自己 new ViewModel
+- AvalonEdit 集成时通过 code-behind 事件转发到 ViewModel（编辑器不直接支持 MVVM 绑定）
 
 ## 10. Constraints
 
@@ -219,5 +279,6 @@ private CliResponse Handle{CommandName}(CliParseResult parsed)
 - **不引入新的 NuGet 包**: 除非功能确实需要且经确认
 - **JSON 序列化一致性**: 写入文件时使用 `Formatting.Indented`，CLI 响应使用 `Formatting.None`
 - **工作区模型**: 一个文件夹 = 一个工作区，所有 .json 文件递归扫描加载
+- **文件脏标记**: 修改 JToken 后需将 `JsonDataFile.IsDirty` 设为 `true`；CLI 命令修改数据后调用 `_onDataModified?.Invoke()` 刷新 UI
 
 </rule>
