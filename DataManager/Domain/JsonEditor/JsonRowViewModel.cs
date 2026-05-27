@@ -15,8 +15,11 @@ namespace DataManager.Domain.JsonEditor
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        /// <summary>行索引（从 0 开始）</summary>
+        /// <summary>行索引（从 0 开始，占位行为 -1）</summary>
         public int RowIndex { get; set; }
+
+        /// <summary>是否为占位空行（仅用于视觉填充，不参与编辑/排序/复制）</summary>
+        public bool IsPlaceholder { get; set; }
 
         /// <summary>每个单元格的值类型，用于颜色区分</summary>
         public IReadOnlyDictionary<string, JsonNodeType> CellTypes => _cellTypes;

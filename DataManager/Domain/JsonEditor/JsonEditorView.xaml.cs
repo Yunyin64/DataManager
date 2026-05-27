@@ -34,6 +34,12 @@ namespace DataManager.Domain.JsonEditor
 
             // 监听行选中变化，更新 SelectedRowId
             DataGridView.CurrentCellChanged += OnCurrentCellChanged;
+
+            // 注册复制/粘贴命令绑定
+            CommandBindings.Add(new CommandBinding(
+                JsonEditorCommands.CopyCommand, OnCopyExecuted, OnCopyCanExecute));
+            CommandBindings.Add(new CommandBinding(
+                JsonEditorCommands.PasteCommand, OnPasteExecuted, OnPasteCanExecute));
         }
 
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -124,6 +130,10 @@ namespace DataManager.Domain.JsonEditor
 
             if (currentItem is JsonRowViewModel row)
             {
+                // 占位行不更新选中 ID
+                if (row.IsPlaceholder)
+                    return;
+
                 var newId = row.GetValue("ID")?.ToString();
                 System.Diagnostics.Debug.WriteLine($"[LuaPanel] OnCurrentCellChanged: newId={newId ?? "null"}, oldId={vm.SelectedRowId ?? "null"}");
                 // 相同 ID 不重复触发
@@ -170,11 +180,18 @@ namespace DataManager.Domain.JsonEditor
         }
 
         /// <summary>
-        /// 行加载时在行头显示连续序号（1, 2, 3...），方便查看总行数。
+        /// 行加载时在行头显示连续序号（1, 2, 3...），占位行不显示。
         /// </summary>
         private void DataGridView_LoadingRow(object? sender, DataGridRowEventArgs e)
         {
-            e.Row.Header = (e.Row.GetIndex() + 1).ToString();
+            if (e.Row.Item is JsonRowViewModel row && row.IsPlaceholder)
+            {
+                e.Row.Header = "";
+            }
+            else
+            {
+                e.Row.Header = (e.Row.GetIndex() + 1).ToString();
+            }
         }
 
         // ── 编辑事件处理 ──────────────────────────────────────
@@ -192,6 +209,13 @@ namespace DataManager.Domain.JsonEditor
 
             if (e.Row.Item is not JsonRowViewModel row)
                 return;
+
+            // 占位行不可编辑
+            if (row.IsPlaceholder)
+            {
+                e.Cancel = true;
+                return;
+            }
 
             // 获取列名
             var columnName = GetColumnName(e.Column);
@@ -304,13 +328,13 @@ namespace DataManager.Domain.JsonEditor
         {
             DataGridView.Columns.Clear();
 
-            // 行号列（只读）
-            var rowIndexCol = new DataGridTextColumn
+            // 行号列（只读）— 使用 TemplateColumn 支持占位行显示 "+" 按钮
+            var rowIndexCol = new DataGridTemplateColumn
             {
                 Header = "#",
-                Binding = new Binding("RowIndex"),
                 Width = new DataGridLength(45),
-                IsReadOnly = true
+                IsReadOnly = true,
+                CellTemplate = CreateRowIndexCellTemplate()
             };
             DataGridView.Columns.Add(rowIndexCol);
 
@@ -373,6 +397,213 @@ namespace DataManager.Domain.JsonEditor
                 </DataTemplate>";
 
             return (DataTemplate)XamlReader.Parse(xaml);
+        }
+
+        /// <summary>
+        /// 创建行号列的 CellTemplate：数据行显示 RowIndex，占位行显示 "+" 按钮。
+        /// </summary>
+        private DataTemplate CreateRowIndexCellTemplate()
+        {
+            var xaml = @"
+                <DataTemplate
+                    xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+                    xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
+                    <Grid>
+                        <!-- 数据行：显示行号 -->
+                        <TextBlock Text=""{Binding RowIndex}""
+                                   Padding=""4,2""
+                                   VerticalAlignment=""Center""
+                                   HorizontalAlignment=""Center"">
+                            <TextBlock.Style>
+                                <Style TargetType=""TextBlock"">
+                                    <Setter Property=""Visibility"" Value=""Visible""/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding=""{Binding IsPlaceholder}"" Value=""True"">
+                                            <Setter Property=""Visibility"" Value=""Collapsed""/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <!-- 占位行：显示 + 按钮 -->
+                        <Button Content=""+""
+                                FontSize=""14""
+                                FontWeight=""Bold""
+                                Padding=""0""
+                                Width=""22"" Height=""22""
+                                HorizontalAlignment=""Center""
+                                VerticalAlignment=""Center""
+                                Cursor=""Hand""
+                                ToolTip=""新增一行数据""
+                                Command=""{Binding DataContext.AddNewRowCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"">
+                            <Button.Style>
+                                <Style TargetType=""Button"">
+                                    <Setter Property=""Visibility"" Value=""Collapsed""/>
+                                    <Setter Property=""Background"" Value=""#E8F5E9""/>
+                                    <Setter Property=""Foreground"" Value=""#388E3C""/>
+                                    <Setter Property=""BorderBrush"" Value=""#A5D6A7""/>
+                                    <Setter Property=""BorderThickness"" Value=""1""/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding=""{Binding IsPlaceholder}"" Value=""True"">
+                                            <Setter Property=""Visibility"" Value=""Visible""/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+                </DataTemplate>";
+
+            return (DataTemplate)XamlReader.Parse(xaml);
+        }
+
+        // ── 复制/粘贴快捷键 ──────────────────────────────────────
+
+        private void OnCopyCanExecute(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.CanExecute = DataGridView.CurrentCell.IsValid && DataContext is JsonEditorViewModel { HasData: true };
+        }
+
+        /// <summary>
+        /// Ctrl+C：复制当前选中单元格的文本值到剪贴板。
+        /// 多个选中单元格时用 Tab 分隔，多行用换行分隔。
+        /// </summary>
+        private void OnCopyExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (DataContext is not JsonEditorViewModel vm)
+                return;
+
+            var selectedCells = DataGridView.SelectedCells;
+            if (selectedCells == null || selectedCells.Count == 0)
+            {
+                // 没有选中区域，尝试复制当前单元格
+                var current = DataGridView.CurrentCell;
+                if (!current.IsValid)
+                    return;
+
+                var text = GetCellText(current);
+                if (text != null)
+                    Clipboard.SetText(text);
+                return;
+            }
+
+            // 按行分组选中单元格（跳过占位行）
+            var rowGroups = new SortedDictionary<int, SortedDictionary<int, string>>();
+            foreach (var cell in selectedCells)
+            {
+                if (cell.Item is not JsonRowViewModel row || row.IsPlaceholder)
+                    continue;
+
+                var colIndex = DataGridView.Columns.IndexOf(cell.Column);
+                if (!rowGroups.ContainsKey(row.RowIndex))
+                    rowGroups[row.RowIndex] = new SortedDictionary<int, string>();
+
+                var cellText = GetCellTextFromRowAndColumn(row, cell.Column);
+                rowGroups[row.RowIndex][colIndex] = cellText ?? "";
+            }
+
+            // 构建输出文本
+            var sb = new System.Text.StringBuilder();
+            foreach (var rowPair in rowGroups)
+            {
+                sb.AppendLine(string.Join("\t", rowPair.Value.Values));
+            }
+
+            var result = sb.ToString().TrimEnd('\r', '\n');
+            if (!string.IsNullOrEmpty(result))
+                Clipboard.SetText(result);
+        }
+
+        private void OnPasteCanExecute(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.CanExecute = DataGridView.CurrentCell.IsValid
+                           && DataContext is JsonEditorViewModel { HasData: true }
+                           && Clipboard.ContainsText();
+        }
+
+        /// <summary>
+        /// Ctrl+V：将剪贴板文本粘贴到当前选中的单元格。
+        /// 支持多行多列粘贴（Tab 分隔列，换行分隔行）。
+        /// </summary>
+        private void OnPasteExecuted(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (DataContext is not JsonEditorViewModel vm)
+                return;
+
+            if (!Clipboard.ContainsText())
+                return;
+
+            var current = DataGridView.CurrentCell;
+            if (!current.IsValid || current.Item is not JsonRowViewModel startRow)
+                return;
+
+            var columnName = GetColumnName(current.Column);
+            if (columnName == null || columnName == "#")
+                return;
+
+            var clipText = Clipboard.GetText();
+            var lines = clipText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+            // 去掉末尾空行
+            if (lines.Length > 1 && string.IsNullOrEmpty(lines[^1]))
+                lines = lines[..^1];
+
+            // 找到起始列索引
+            var startColIdx = vm.Columns.IndexOf(columnName);
+            if (startColIdx < 0)
+                return;
+
+            // 找到起始行在 Rows 中的位置
+            var startRowIdx = vm.Rows.IndexOf(startRow);
+            if (startRowIdx < 0)
+                return;
+
+            // 逐行逐列粘贴
+            for (int lineIdx = 0; lineIdx < lines.Length; lineIdx++)
+            {
+                var targetRowIdx = startRowIdx + lineIdx;
+                if (targetRowIdx >= vm.Rows.Count)
+                    break;
+
+                var targetRow = vm.Rows[targetRowIdx];
+                var cells = lines[lineIdx].Split('\t');
+
+                for (int cellIdx = 0; cellIdx < cells.Length; cellIdx++)
+                {
+                    var targetColIdx = startColIdx + cellIdx;
+                    if (targetColIdx >= vm.Columns.Count)
+                        break;
+
+                    var targetColName = vm.Columns[targetColIdx];
+                    var newText = cells[cellIdx];
+
+                    // 调用 ViewModel 的编辑提交方法
+                    vm.CommitCellEdit(targetRow.RowIndex, targetColName, newText);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 从 DataGridCellInfo 获取单元格的文本值。
+        /// </summary>
+        private string? GetCellText(DataGridCellInfo cellInfo)
+        {
+            if (cellInfo.Item is not JsonRowViewModel row)
+                return null;
+            return GetCellTextFromRowAndColumn(row, cellInfo.Column);
+        }
+
+        /// <summary>
+        /// 从行 ViewModel 和 DataGridColumn 获取文本值。
+        /// </summary>
+        private string? GetCellTextFromRowAndColumn(JsonRowViewModel row, DataGridColumn? column)
+        {
+            var colName = GetColumnName(column);
+            if (colName == null)
+                return null;
+            if (colName == "#")
+                return row.RowIndex.ToString();
+            return row.GetValue(colName)?.ToString() ?? "";
         }
 
         // ── 辅助方法 ──────────────────────────────────────────

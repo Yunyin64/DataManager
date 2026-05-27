@@ -3,8 +3,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:local="clr-namespace:DataManager.Domain.JsonEditor"
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="600">
+    <UserControl.InputBindings>
+        <KeyBinding Key="C" Modifiers="Ctrl" Command="{x:Static local:JsonEditorCommands.CopyCommand}"/>
+        <KeyBinding Key="V" Modifiers="Ctrl" Command="{x:Static local:JsonEditorCommands.PasteCommand}"/>
+    </UserControl.InputBindings>
     <Grid Background="White">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -50,6 +55,7 @@
                   AlternatingRowBackground="#FAFAFA"
                   RowHeaderWidth="50"
                   SelectionUnit="Cell"
+                  ClipboardCopyMode="None"
                   BorderThickness="0"
                   FontSize="13"
                   LoadingRow="DataGridView_LoadingRow"
